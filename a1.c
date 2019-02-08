@@ -8,7 +8,7 @@
 #include <netdb.h> 
 
 #define DEFAULT_PORT 80 //default server port
-#define LENGTH 1024
+#define LENGTH 8192
 void error(const char *msg)
 {
     perror(msg);
@@ -32,17 +32,14 @@ int checkport(const char *m)
 /* extracts hostname from header */
 void gethost(const char *m, char **hostname)
 {
-	fprintf(stderr, "our message:%s\n", m);
 	/* check if "Host" has space after */
 	*hostname = strtok((char *)m, " ");
-	*hostname = strtok(NULL, "\r\n");
-	//fprintf(stderr, "testing %s\n", hostname);
-		
+	*hostname = strtok(NULL, "\r\n");	
 }
 /* reads one line from request header */
-void readaline(char *buffer, int *port_num, char **hostname) 
+void readaline(char *message, int *port_num, char **hostname) 
 {
-	const char *message = strtok(buffer, "\r\n");
+	//const char *message = strtok(buffer, "\r\n");
 	if(message) {
 		/* get portno */
 		if(strncmp(message, "GET", strlen("GET")) == 0) {
@@ -57,15 +54,16 @@ void readaline(char *buffer, int *port_num, char **hostname)
 }
 
 /* forward client HTTP request to server */
-char* forward(char* buffer, int port_num)
+void forward(char* buffer, char* hostname, int port_num)
 { 
-	char hostname[] = "www.cs.tufts.edu"; /*hard code for now */
 	struct hostent *server;
-	/* extract port number from path*/
 	int sockfd, n;
 	struct sockaddr_in serv_addr;
+	sockfd = socket(AF_INET, SOCK_STREAM, 0);
+	if (sockfd < 0) 
+        error("ERROR opening socket");
 	/* get host information */
-	server = gethostbyname("www.cs.tufts.edu");
+	server = gethostbyname(hostname);
 	printf("%s\n", hostname);
 	if (server == NULL) {
         fprintf(stderr,"ERROR, no such host\n");
@@ -84,13 +82,12 @@ char* forward(char* buffer, int port_num)
 	n = write(sockfd,buffer,strlen(buffer));
 	if (n < 0) 
          error("ERROR writing to socket");
-    bzero(buffer,256);
-    n = read(sockfd,buffer,255);
+    bzero(buffer,LENGTH);
+    n = read(sockfd,buffer,LENGTH);
     if (n < 0) 
          error("ERROR reading from socket");
     printf("%s\n",buffer);
     close(sockfd);
-	return buffer;
 }
 
 
@@ -99,8 +96,7 @@ int main (int argc, char* argv[]) {
 	/* receiving */
 	int sockfd, newsockfd, n, pid, portno;
 	socklen_t clilen;
-	char buffer[4096], temp[4096];
-	char *response;
+	char buffer[LENGTH], temp[LENGTH];
 	struct sockaddr_in serv_addr, cli_addr;
 	
 	/* request header */
@@ -146,22 +142,27 @@ int main (int argc, char* argv[]) {
 		error("ERROR on fork");
 	if (pid == 0) {
 		close(sockfd);
-		bzero(buffer,1024);
-		bzero(temp, 4096);
+		bzero(buffer,LENGTH);
+		bzero(temp, LENGTH);
 		/* read client request */
 		n = read(newsockfd,buffer,sizeof(buffer));
 		if (n < 0) error("ERROR reading from socket");
 		printf("Here is the message: %s\n",buffer);
 		
-		/* save message */
+		/* local copy */
 		strcpy(temp, buffer);
-		fprintf(stderr, "%temp: s\n", temp);
-		readaline(temp, &port_num, &hostname);
+		char *state; /* ptr for state*/
+		char *message = strtok_r(temp, "\r\n", &state);
+		/* parse GET request */
+		do{
+			readaline(message, &port_num, &hostname);
+		}while((message = strtok_r(NULL, "\r\n", &state)) != NULL);
+		
 		printf("hostname:%s\n", hostname);
 		fprintf(stderr, "port number:%d\n",port_num);
-		/* parse GET request */
+		
 		/* forward request to server */  
-		//response = forward(buffer);
+		forward(buffer, hostname, port_num);
 		/* send HTTP response to client */
 		n = write(newsockfd,buffer,sizeof(buffer));
 		if (n < 0) error("ERROR writing to socket");
