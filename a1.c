@@ -8,7 +8,7 @@
 #include <netdb.h> 
 
 #define DEFAULT_PORT 80 //default server port
-#define LENGTH 10000
+#define LENGTH 2000000
 void error(const char *msg)
 {
     perror(msg);
@@ -54,15 +54,11 @@ void readaline(char *message, int *port_num, char **hostname)
 
 int getlength(char *message) 
 {
-	//printf("message:%s\n", message);
 	if(strncmp(message, "Content-Length: ", 
 	strlen("Content-Length: ")) == 0) {
 		char *content = strtok(message, " ");
-		//printf("content:%s\n", content);
 		content = strtok(NULL, "\r\n");
-		//printf("content:%s\n", content);
 		int content_length = atoi(content);
-		//printf("content length in getlength:%d\n", content_length);
 		return content_length;
 	}	
 	else
@@ -74,6 +70,7 @@ int forward(char* buffer, char* hostname, int port_num)
 { 
 	struct hostent *server;
 	int sockfd, n, content_length = 0;
+	int header_length;
 	struct sockaddr_in serv_addr;
 	sockfd = socket(AF_INET, SOCK_STREAM, 0);
 	char temp[LENGTH];
@@ -81,7 +78,6 @@ int forward(char* buffer, char* hostname, int port_num)
         error("ERROR opening socket");
 	/* get host information */
 	server = gethostbyname(hostname);
-	//printf("%s\n", hostname);
 	if (server == NULL) {
         fprintf(stderr,"ERROR, no such host\n");
         exit(0);
@@ -97,33 +93,35 @@ int forward(char* buffer, char* hostname, int port_num)
 	if (connect(sockfd,(struct sockaddr *) &serv_addr,sizeof(serv_addr)) < 0) 
         error("ERROR connecting");
 	n = write(sockfd,buffer,strlen(buffer));
-	printf("size of header: %d\n", n);
 	if (n < 0) 
          error("ERROR writing to socket");
     bzero(buffer,LENGTH);
 	
 	n = read(sockfd, buffer, LENGTH);
-	printf("n:%d\n", n);
 	memcpy(temp, buffer, strlen(buffer)+1); /* null char */
 	char *state; /* ptr for state*/
-	char *message = strtok_r(temp, "\r\n", &state);
+	char *message = strtok_r(temp, "\r\n", &state); 
 	/*determine content length */
 	for(int i = 0; i < 20; i++) {
-		printf("message:%s\n", message);
-		content_length = getlength(message);
-		if (content_length != 0) 
-			break;
-		else
-			message = strtok_r(NULL, "\r\n", &state);
+		int cl = getlength(message);
+		if (cl != 0) 
+			content_length = cl;
+		message = strtok_r(NULL, "\r\n", &state);
 	}
+	fprintf(stderr, "content_length%d\n", content_length);
 	/* check for partial read */
+	int num = 1;
+	while(n < content_length || num) {
+		num = read(sockfd, &buffer[n], LENGTH);
+		n += num;
+		fprintf(stderr, "partial reading: %d \n", n);
+	}
 
-	printf("content_length%d\n", content_length);
-
+	fprintf(stderr, "size of content: %d\n", n);
     if (n < 0) 
-         error("ERROR reading from socket");
-    printf("n in forward: %s\n",buffer);
-    close(sockfd);
+        error("ERROR reading from socket");
+   	printf("%s",buffer);
+   	close(sockfd);
 	return n;
 }
 
@@ -182,7 +180,6 @@ int main (int argc, char* argv[]) {
 		bzero(buffer,LENGTH);
 		bzero(temp, LENGTH);
 		/* read client request */
-		
 		n = read(newsockfd,buffer,sizeof(buffer));
 		if (n < 0) error("ERROR reading from socket");
 		
@@ -200,11 +197,10 @@ int main (int argc, char* argv[]) {
 		
 		/* forward request to server, returns n */  
 		int length = forward(buffer, hostname, port_num);
-		printf("n: %d\n", length);
 		/* send HTTP response to client */
 		
 		n = write(newsockfd,buffer,length);
-		printf("write n:%d\n", n);
+		fprintf(stderr, "client receives n of:%d\n", n);
 		if (n < 0) error("ERROR writing to socket");
 		exit(0);
 	}
