@@ -8,7 +8,7 @@
 #include <netdb.h> 
 
 #define DEFAULT_PORT 80 //default server port
-#define LENGTH 8192
+#define LENGTH 10000
 void error(const char *msg)
 {
     perror(msg);
