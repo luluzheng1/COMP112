@@ -133,12 +133,6 @@ int forward(char* buffer, char* hostname, int port_num)
 }
 
 void initialize_Struct(Data **d) {
-	*d = malloc(numCache * sizeof(*d));
-	if(*d == NULL)
-	{
-		printf("Memory allocation error");
-		return;
-	}
 	(*d)->hostname = (char *)malloc(sizeof(char *));
 	(*d)->url = (char *)malloc(sizeof(char*));
 	(*d)->portno = 80;
@@ -160,11 +154,20 @@ int main (int argc, char* argv[]) {
 	int port_num;
 	char* hostname = (char*) malloc(sizeof(char)*10);
 	
-	/* Set up Cache */
-	Data* d = NULL;
-	/* Initialize Cache */
-	initialize_Struct(&d);
-	printf("portno: %d\n", d->portno);
+	/* Declare array of pointers to struct object */
+	Data *d[10];
+	/* Allocate pointers and initialize cache*/ 
+	for(int i = 0; i < numCache; i++){
+		d[i] = malloc(sizeof(Data));
+		if(d[i] == NULL)
+		{
+			printf("Memory allocation error");
+		}
+		initialize_Struct(&(d[i]));
+	}
+	/* Declare pointer to Cache array */
+	Data*(*Cache)[] = &d;
+	
 	
 	if (argc != 2) {
     fprintf(stderr, "Usage: %s <port>\n", argv[0]);
@@ -238,3 +241,13 @@ int main (int argc, char* argv[]) {
     close(sockfd);
     return 0; 
 }
+
+/*(*Cache)[0]->hostname = "why hello";
+	(*Cache)[0]->hostname = buffer;
+		printf("hostname: %s\n", (*Cache)[0]->hostname);
+		
+	printf("hostname: %s\n", (*Cache)[0]->hostname);
+	printf("portno: %d\n", (*Cache)[0]->Age);
+	printf("portno: %d\n", (*Cache)[0]->portno);
+	*/
+	
