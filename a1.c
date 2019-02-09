@@ -9,6 +9,13 @@
 
 #define DEFAULT_PORT 80 //default server port
 #define LENGTH 2000000
+#define numCache 10
+
+typedef struct Data {
+	char *hostname, *url,*content;
+	int Age,max_Age,last_accessed,portno; 
+} Data;
+
 void error(const char *msg)
 {
     perror(msg);
@@ -125,7 +132,22 @@ int forward(char* buffer, char* hostname, int port_num)
 	return n;
 }
 
-
+void initialize_Struct(Data **d) {
+	*d = malloc(numCache * sizeof(*d));
+	if(*d == NULL)
+	{
+		printf("Memory allocation error");
+		return;
+	}
+	(*d)->hostname = (char *)malloc(sizeof(char *));
+	(*d)->url = (char *)malloc(sizeof(char*));
+	(*d)->portno = 80;
+	(*d)->content = (char *)malloc(sizeof(char*));
+	(*d)->Age = -1;
+	(*d)->max_Age = -1;
+	(*d)->last_accessed = -1;
+}
+			
 int main (int argc, char* argv[]) {
 	/* n is the return value for read/write calls */
 	/* receiving */
@@ -137,6 +159,12 @@ int main (int argc, char* argv[]) {
 	/* request header */
 	int port_num;
 	char* hostname = (char*) malloc(sizeof(char)*10);
+	
+	/* Set up Cache */
+	Data* d = NULL;
+	/* Initialize Cache */
+	initialize_Struct(&d);
+	printf("portno: %d\n", d->portno);
 	
 	if (argc != 2) {
     fprintf(stderr, "Usage: %s <port>\n", argv[0]);
