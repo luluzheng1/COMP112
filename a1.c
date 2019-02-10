@@ -48,22 +48,23 @@ int checkport(const char *m)
 		return DEFAULT_PORT;
 }
 
-void getURL(const char *m, char **URL)
+void getURL(const char *m, Data **object)
 {
-	*URL = strtok((char *)m, " ");
-	*URL = strtok(NULL, " ");
-	/*fprintf(stderr, "URL:%s\n", *URL);*/
+	(*object)->url = strtok((char *)m, " ");
+	(*object)->url = strtok(NULL, " ");
+	//fprintf(stderr, "URL:%s\n", (*object)->url);
 }
 
 /* extracts hostname from header */
-void gethost(const char *m, char **hostname)
+void gethost(const char *m, Data **object)
 {
 	/* check if "Host" has space after */
-	*hostname = strtok((char *)m, " ");
-	*hostname = strtok(NULL, "\r\n");	
+	(*object)->hostname = strtok((char *)m, " ");
+	(*object)->hostname = strtok(NULL, "\r\n");	
+	//fprintf(stderr, "hostname:%s\n", (*object)->hostname);
 }
 /* reads one line from request header */
-void readaline(char *message, int *port_num, char **hostname, char **URL) 
+void readaline(char *message, Data **object) 
 {
 	if(message) {
 		/* get portno */
@@ -71,13 +72,13 @@ void readaline(char *message, int *port_num, char **hostname, char **URL)
 			fprintf(stderr, "Got GET field\n");
 			char *tempstr = malloc(strlen(message)+1);
 			memcpy(tempstr, message, strlen(message)+1);
-			getURL(tempstr, URL);
-			*port_num = checkport(message);
-			/*fprintf(stderr, "message:%s URL:%s\n port_num: %d\n", message,*URL, *port_num);*/
+			getURL(tempstr, object);
+			(*object)->portno = checkport(message);
+			//fprintf(stderr, "message:%s URL:%s\n port_num: %d\n", message, (*object)->url, (*object)->portno);
 		}
 		else if(strncmp(message, "Host: ", strlen("Host: ")) == 0) {
-			fprintf(stderr, "Got Host field\n");
-			gethost(message, hostname);
+			//fprintf(stderr, "Got Host field\n");
+			gethost(message, object);
 		}
 	}
 }
@@ -122,7 +123,7 @@ double compute_Age(Data **Cache, int index) {
 	return Age;
 }
 /* forward client HTTP request to server */
-int forward(char* buffer, char* hostname, int port_num)
+int forward(char* buffer, Data **object)
 { 
 	struct hostent *server;
 	int sockfd, n, content_length = 0;
@@ -133,7 +134,7 @@ int forward(char* buffer, char* hostname, int port_num)
 	if (sockfd < 0) 
         error("ERROR opening socket");
 	/* get host information */
-	server = gethostbyname(hostname);
+	server = gethostbyname((*object)->hostname);
 	if (server == NULL) {
         fprintf(stderr,"ERROR, no such host\n");
         exit(0);
@@ -144,7 +145,7 @@ int forward(char* buffer, char* hostname, int port_num)
     bcopy((char *)server->h_addr, 
          (char *)&serv_addr.sin_addr.s_addr,
          server->h_length);
-    serv_addr.sin_port = htons(port_num);
+    serv_addr.sin_port = htons((*object)->portno);
 	/* connect to HTTP server */ 
 	if (connect(sockfd,(struct sockaddr *) &serv_addr,sizeof(serv_addr)) < 0) 
         error("ERROR connecting");
@@ -161,7 +162,7 @@ int forward(char* buffer, char* hostname, int port_num)
 	for(int i = 0; i < 20; i++) {
 		char *temp = message;
 		/*checks maxage*/
-		max_Age = get_MaxAge(temp);
+		(*object)->max_Age = get_MaxAge(temp);
 		/*checks content length */
 		int cl = getlength(message);
 		if (cl != 0) 
@@ -210,27 +211,24 @@ int get_item(Data **Cache, char **content, char*URL)
 		return -1;
 }
 
-void cache_item(Data **Cache, int index)
+void cache_item(Data **Cache, Data *object, int index)
 {
-	
+	Cache[index]->hostname = object->hostname;
+	Cache[index]->url = object->url;
+	Cache[index]->content = object->content;
 }
 	
 int main (int argc, char* argv[]) {
-	/* n is the return value for read/write calls */
 	/* receiving */
-	int sockfd, newsockfd, n, pid, portno;
+	/* n is the return value for read/write calls */
 	socklen_t clilen;
+	int sockfd, newsockfd, n, pid; 
 	char buffer[LENGTH], temp[LENGTH];
 	struct sockaddr_in serv_addr, cli_addr;
-	int filesize = 0;
-	/* request header */
-	int port_num;
-	char* hostname = (char*) malloc(sizeof(char)*10);
-	char * URL = (char*) malloc(sizeof(char) * 100);
+	
 	/* intialize temp struct*/
 	Data *object = malloc(sizeof(*object));
 	initialize_Struct(&object);
-	fprintf(stderr, "object portnum %d\n", object->portno);
 	
 	/* Declare array of pointers to struct object */
 	/*Data *d[10];
@@ -259,10 +257,10 @@ int main (int argc, char* argv[]) {
 	/* initialize to 0 */
 	bzero((char *) &serv_addr, sizeof(serv_addr));
 	/* read provided port */
-	portno = atoi(argv[1]); 
+	int portnum = atoi(argv[1]); 
 	serv_addr.sin_family = AF_INET;			/* set address family */
     serv_addr.sin_addr.s_addr = INADDR_ANY;	/* set IP address */
-    serv_addr.sin_port = htons(portno);		/* set port number */
+    serv_addr.sin_port = htons(portnum);		/* set port number */
 	
 	/* bind socket to address of host run on server */
 	if (bind(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) 
@@ -270,12 +268,11 @@ int main (int argc, char* argv[]) {
 	
 	/* listen for connections */
 	listen(sockfd,5);
-	fprintf(stderr, "%s: server listening on port %d \n", argv[0], portno);
+	fprintf(stderr, "%s: server listening on port %d \n", argv[0], portnum);
 	
 	/* get size of client addr struct */
 	clilen = sizeof(cli_addr);
 	while(1){
-	//port_num = DEFAULT_PORT;
 	/* establish connection with client */
 	newsockfd = accept(sockfd, (struct sockaddr *) &cli_addr, &clilen);
 	if (newsockfd < 0)
@@ -297,14 +294,11 @@ int main (int argc, char* argv[]) {
 		char *message = strtok_r(temp, "\r\n", &state);
 		/* parse GET request */
 		do{
-			readaline(message, &port_num, &hostname, &URL);
+			readaline(message, &object);
 		}while((message = strtok_r(NULL, "\r\n", &state)) != NULL);
 		
-		//printf("hostname:%s\n", hostname);
-		//fprintf(stderr, "port number:%d\n",port_num);
-		
 		/* forward request to server, returns n */  
-		int length = forward(buffer, hostname, port_num);
+		int length = forward(buffer, &object);
 		/* send HTTP response to client */
 		
 		n = write(newsockfd,buffer,length);
